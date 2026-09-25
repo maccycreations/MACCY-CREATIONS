@@ -1,19 +1,44 @@
 # MACCY-CREATIONS
 
-Supabase integration has been added for project `kyrsdewrgqejoajhpfrn`.
+This repository now includes a working Supabase configuration scaffold and a minimal FastAPI application shell.
 
-## Configuration
+## Setup
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 cp .env.example .env
-# Edit .env and replace <YOUR-PASSWORD> in DATABASE_URL locally.
+# Fill in your real local values before runtime.
 ```
 
-The publishable Supabase key is included in `.env.example`; `.env` is intentionally not committed. Never put a database password or a Supabase service-role key in source control.
+Edit `.env` with the secure values:
 
-## Supabase CLI
+```env
+SUPABASE_URL=https://kyrsdewrgqejoajhpfrn.supabase.co
+SUPABASE_KEY=sb_publishable_cAtn2dFn4QIv7BSCl7Vmmg_hmOz3jVd
+DATABASE_URL=postgresql://postgres:<YOUR-PASSWORD>@db.kyrsdewrgqejoajhpfrn.supabase.co:5432/postgres
+```
 
-Install the Supabase CLI, then run locally from this repository:
+The password must not be committed to GitHub. If it contains special characters, URL-encode it.
+
+## Run the app
+
+```bash
+uvicorn main:app --reload
+```
+
+## Endpoints
+
+- `GET /health`
+- `GET /supabase`
+- `GET /profiles`
+- `POST /profiles`
+- `GET /database`
+
+## Supabase
+
+Run the CLI locally:
 
 ```bash
 supabase login
@@ -21,29 +46,4 @@ supabase link --project-ref kyrsdewrgqejoajhpfrn
 supabase db push
 ```
 
-The migration in `supabase/migrations/0001_initial.sql` creates:
-
-- `profiles`
-- `user_settings`
-- `app_data`
-- Auth user provisioning trigger
-- Owner-only RLS policies based on `auth.uid()`
-
-## Python client
-
-Install the dependencies used by `supabase_client.py`:
-
-```bash
-pip install supabase python-dotenv
-```
-
-Example:
-
-```python
-from supabase_client import get_supabase
-
-client = get_supabase()
-response = client.auth.sign_up({"email": "user@example.com", "password": "use-a-strong-password"})
-```
-
-The repository currently contains no application entrypoint to wire into this client, so this commit provides the secure Supabase foundation rather than claiming the entire application is already connected. The supplied Postgres URI contained a password placeholder; direct Postgres operations cannot work until `DATABASE_URL` is filled locally.
+The RLS setup lives in `supabase/migrations/0001_initial.sql`.
