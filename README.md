@@ -1,33 +1,70 @@
 # MACCY-CREATIONS
 
-## Configure and run
+A complete, deployable FastAPI starter for the MACCY-CREATIONS brand, backed by Supabase auth and data storage and designed to run locally with a secure environment file.
+
+## Features
+
+- Landing page and login page
+- Supabase-based auth (signup, login, logout, current user)
+- Protected profile API and app-data API
+- Dashboard summary endpoint
+- Local health and configuration checks
+- Database and RLS-ready schema scripts
+- Demo-friendly local startup without a live Supabase connection
+
+## Run locally
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-# Fill DATABASE_URL locally if direct Postgres access is needed.
-supabase login
-supabase link --project-ref kyrsdewrgqejoajhpfrn
-supabase db push
+# Add the real DATABASE_URL password locally before direct Postgres access.
 uvicorn main:app --reload
 ```
 
-The API uses the Supabase project `kyrsdewrgqejoajhpfrn`, request-scoped JWT clients, and RLS-backed tables. Never return or commit database passwords, and never use a service-role key in a browser.
+Then open:
 
-## Endpoints
+- http://localhost:8000/
+- http://localhost:8000/login
+- http://localhost:8000/dashboard
 
-- `GET /health` and `GET /supabase`: safe configuration checks
-- `POST /auth/signup`, `POST /auth/login`, `GET /auth/me`, `POST /auth/logout`
-- `GET /profiles`, `PUT /profiles`
-- `GET /app-data?entity_type=...`, `POST /app-data`
-- `GET /database`: reports configuration only and never returns the connection string
+## Environment file
 
-Send protected requests with:
+```env
+SUPABASE_URL=https://kyrsdewrgqejoajhpfrn.supabase.co
+SUPABASE_KEY=sb_publishable_cAtn2dFn4QIv7BSCl7Vmmg_hmOz3jVd
+DATABASE_URL=postgresql://postgres:<YOUR-PASSWORD>@db.kyrsdewrgqejoajhpfrn.supabase.co:5432/postgres
+```
+
+Do not commit `.env` or service-role keys. Use the publishable key for RLS-backed client access.
+
+## Supabase setup
+
+```bash
+supabase login
+supabase link --project-ref kyrsdewrgqejoajhpfrn
+supabase db push
+```
+
+The migration files live in `supabase/migrations/`.
+
+## API examples
+
+```bash
+curl -X POST http://localhost:8000/api/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"Pass12345","display_name":"User"}'
+```
+
+```bash
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"Pass12345"}'
+```
+
+Send the access token as:
 
 ```text
 Authorization: Bearer <access_token>
 ```
-
-The Supabase email-confirmation setting may require the user to confirm their email before login. Migrations `0001_initial.sql` and `0002_operational.sql` configure the schema, RLS, auth trigger, indexes, and update timestamps.

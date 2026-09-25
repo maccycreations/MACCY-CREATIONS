@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Login | MACCY-CREATIONS</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <main class="auth-shell">
+      <div class="auth-card">
+        <h1>Log in</h1>
+        <form id="login-form">
+          <label>
+            Email
+            <input type="email" id="email" required>
+          </label>
+          <label>
+            Password
+            <input type="password" id="password" required>
+          </label>
+          <button type="submit">Continue</button>
+        </form>
+        <p class="tiny">Authenticate with your Supabase account or use a configured project user.</p>
+      </div>
+    </main>
+
+    <script>
+      document.getElementById('login-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: document.getElementById('email').value,
+            password: document.getElementById('password').value,
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          alert(data.detail || 'Login failed');
+          return;
+        }
+        localStorage.setItem('maccy_access_token', data.access_token);
+        window.location.href = '/dashboard';
+      });
+    </script>
+  </body>
+</html>

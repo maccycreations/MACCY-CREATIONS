@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dashboard | MACCY-CREATIONS</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">MACCY-CREATIONS</div>
+      <div class="nav-right">
+        <button id="logout-btn">Logout</button>
+      </div>
+    </header>
+
+    <main class="dashboard-shell">
+      <aside class="sidebar">
+        <h3>Navigation</h3>
+        <ul>
+          <li>Overview</li>
+          <li>Projects</li>
+          <li>Clients</li>
+          <li>Reports</li>
+        </ul>
+      </aside>
+
+      <section class="content">
+        <div class="stats">
+          <article class="stat-box">
+            <span>Projects</span>
+            <strong id="project-count">0</strong>
+          </article>
+          <article class="stat-box">
+            <span>Clients</span>
+            <strong id="client-count">0</strong>
+          </article>
+          <article class="stat-box">
+            <span>Notes</span>
+            <strong id="note-count">0</strong>
+          </article>
+        </div>
+
+        <div class="panel">
+          <h2>Welcome</h2>
+          <p id="welcome-text">Loading dashboard...</p>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const token = localStorage.getItem('maccy_access_token');
+      if (!token) {
+        window.location.href = '/login';
+      }
+
+      async function loadDashboard() {
+        const response = await fetch('/api/dashboard', { headers: { Authorization: `Bearer ${token}` } });
+        if (!response.ok) {
+          window.location.href = '/login';
+          return;
+        }
+        const data = await response.json();
+        document.getElementById('welcome-text').textContent = `Hello, ${data.user.name || data.user.email}`;
+        document.getElementById('project-count').textContent = data.counts.projects;
+        document.getElementById('client-count').textContent = data.counts.clients;
+        document.getElementById('note-count').textContent = data.counts.notes;
+      }
+
+      document.getElementById('logout-btn').addEventListener('click', async () => {
+        await fetch('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+        localStorage.removeItem('maccy_access_token');
+        window.location.href = '/login';
+      });
+
+      loadDashboard();
+    </script>
+  </body>
+</html>
