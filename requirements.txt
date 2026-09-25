@@ -1,10 +1,91 @@
-fastapi>=0.111.0
-uvicorn[standard]>=0.30.1
-supabase>=2.7.1
-python-dotenv>=1.0.1
-pydantic>=2.7.0
-jinja2>=3.1.4
-sqlmodel>=0.0.22
-pytest>=8.2.0
-httpx>=0.27.0
-python-multipart>=0.0.9
+from __future__ import annotations
+
+from typing import Any, Optional
+
+from fastapi import APIRouter, File, Header, HTTPException, Query, UploadFile
+from pydantic import BaseModel, Field
+
+from app.sync import enqueue, pending, push_pending
+from auth import bearer_token, get_current_user
+from services.ai import complete
+from services.ats import analyze_resume
+from services.document_parser import extract_text
+from services.jobs import fetch_jobs
+
+router = APIRouter(prefix="/api/product", tags=["product"])
+
+
+class ATSRequest(BaseModel):
+    resume_text: str = Field(..., min_length=1)
+    job_description: str = ""
+
+
+class AIRequest(BaseModel):
+    provider: str = "openai"
+    prompt: str = Field(..., min_length=1)
+    model: Optional[str] = None
+
+
+def authenticated(authorization: Optional[str]):
+    try:
+        token = bearer_token(authorization)
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    user = get_current_user(token)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return token, user
+
+
+@router.get("/jobs/search")
+async def search_jobs(q: str = Query("python"), remote_only: bool = False):
+    return [job.model_dump() for job in await fetch_jobs(q, remote_only)]
+
+
+@router.post("/ats/analyze")
+def ats_analyze(payload: ATSRequest):
+    return analyze_resume(payload.resume_text, payload.job_description)
+
+
+@router.post("/resumes/upload")
+async def upload_resume(file: UploadFile = File(...)):
+    allowed = {"application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain"}
+    if file.content_type not in allowed:
+        raise HTTPException(status_code=415, detail="Upload PDF, DOCX, or TXT files")
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File must be 10 MB or smaller")
+    try:
+        text = extract_text(file.filename or "upload.txt", content)
+    except (ValueError, ImportError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"filename": file.filename, "content_type": file.content_type, "size": len(content), "text": text, "ats": analyze_resume(text)}
+
+
+@router.post("/ai/complete")
+async def ai_complete(payload: AIRequest, authorization: Optional[str] = Header(default=None)):
+    authenticated(authorization)
+    try:
+        return await complete(payload.provider, payload.prompt, payload.model)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"AI provider request failed: {exc}") from exc
+
+
+@router.post("/sync/queue")
+def queue_sync(entity_type: str, operation: str, payload: dict[str, Any], authorization: Optional[str] = Header(default=None)):
+    _, user = authenticated(authorization)
+    return enqueue(entity_type, operation, payload, user.id)
+
+
+@router.get("/sync/pending")
+def pending_sync(authorization: Optional[str] = Header(default=None)):
+    _, user = authenticated(authorization)
+    return [event.model_dump() for event in pending(user.id)]
+
+
+@router.post("/sync/push")
+async def sync_push(authorization: Optional[str] = Header(default=None)):
+    token, user = authenticated(authorization)
+    return await push_pending(token, user.id)

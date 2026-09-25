@@ -1,65 +1,40 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+import os
+from typing import Any
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
-from pydantic import BaseModel, Field
-
-from app.models import JobListing
-from app.sync import enqueue, pending
-from services.ai import complete
-from services.ats import analyze_resume
-from services.jobs import fetch_jobs
-
-router = APIRouter(prefix="/api/product", tags=["product"])
+import httpx
 
 
-class ATSRequest(BaseModel):
-    resume_text: str = Field(..., min_length=1)
-    job_description: str = ""
-
-
-class AIRequest(BaseModel):
-    provider: str = "openai"
-    prompt: str = Field(..., min_length=1)
-    model: Optional[str] = None
-
-
-@router.get("/jobs/search")
-async def search_jobs(q: str = Query("python"), remote_only: bool = False):
-    return [job.model_dump() for job in await fetch_jobs(q, remote_only)]
-
-
-@router.post("/ats/analyze")
-def ats_analyze(payload: ATSRequest):
-    return analyze_resume(payload.resume_text, payload.job_description)
-
-
-@router.post("/resumes/upload")
-async def upload_resume(file: UploadFile = File(...)):
-    if file.content_type not in {"application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain"}:
-        raise HTTPException(status_code=415, detail="Upload PDF, DOCX, or TXT files")
-    content = await file.read()
-    if len(content) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="File must be 10 MB or smaller")
-    return {"filename": file.filename, "content_type": file.content_type, "size": len(content), "message": "Upload accepted; parse with a configured document worker before ATS analysis."}
-
-
-@router.post("/ai/complete")
-async def ai_complete(payload: AIRequest):
-    try:
-        return await complete(payload.provider, payload.prompt, payload.model)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"AI provider request failed: {exc}") from exc
-
-
-@router.post("/sync/queue")
-def queue_sync(entity_type: str, operation: str, payload: dict[str, Any]):
-    return enqueue(entity_type, operation, payload)
-
-
-@router.get("/sync/pending")
-def pending_sync():
-    return [event.model_dump() for event in pending()]
+async def complete(provider: str, prompt: str, model: str | None = None) -> dict[str, Any]:
+    provider = provider.lower()
+    if provider in {"openai", "grok", "custom"}:
+        key = os.getenv("XAI_API_KEY" if provider == "grok" else "OPENAI_API_KEY" if provider == "openai" else "CUSTOM_AGENT_API_KEY")
+        base = os.getenv("XAI_BASE_URL", "https://api.x.ai/v1") if provider == "grok" else os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        if not key:
+            raise RuntimeError("Provider API key is not configured")
+        payload = {"model": model or ("grok-3-mini" if provider == "grok" else "gpt-4o-mini"), "messages": [{"role": "user", "content": prompt}]}
+        async with httpx.AsyncClient(timeout=45) as client:
+            response = await client.post(f"{base}/chat/completions", headers={"Authorization": f"Bearer {key}"}, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            return {"provider": provider, "text": data["choices"][0]["message"]["content"]}
+    if provider == "gemini":
+        key = os.getenv("GEMINI_API_KEY")
+        if not key: raise RuntimeError("GEMINI_API_KEY is not configured")
+        selected = model or "gemini-2.0-flash"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{selected}:generateContent?key={key}"
+        async with httpx.AsyncClient(timeout=45) as client:
+            response = await client.post(url, json={"contents": [{"parts": [{"text": prompt}]}]})
+            response.raise_for_status()
+            data = response.json()
+            return {"provider": provider, "text": data["candidates"][0]["content"]["parts"][0]["text"]}
+    if provider == "anthropic":
+        key = os.getenv("ANTHROPIC_API_KEY")
+        if not key: raise RuntimeError("ANTHROPIC_API_KEY is not configured")
+        async with httpx.AsyncClient(timeout=45) as client:
+            response = await client.post("https://api.anthropic.com/v1/messages", headers={"x-api-key": key, "anthropic-version": "2023-06-01"}, json={"model": model or "claude-3-5-haiku-latest", "max_tokens": 1024, "messages": [{"role": "user", "content": prompt}]})
+            response.raise_for_status()
+            data = response.json()
+            return {"provider": provider, "text": data["content"][0]["text"]}
+    raise RuntimeError("Unsupported provider")
