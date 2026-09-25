@@ -1,33 +1,33 @@
 # MACCY-CREATIONS
 
-The repository now includes a FastAPI backend with Supabase-ready auth and app-data endpoints. This is the next stage beyond the configuration scaffold.
-
-## Run
+## Configure and run
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-# Set the real local password in DATABASE_URL before direct DB access.
+# Fill DATABASE_URL locally if direct Postgres access is needed.
+supabase login
+supabase link --project-ref kyrsdewrgqejoajhpfrn
+supabase db push
 uvicorn main:app --reload
 ```
 
-## Auth endpoints
+The API uses the Supabase project `kyrsdewrgqejoajhpfrn`, request-scoped JWT clients, and RLS-backed tables. Never return or commit database passwords, and never use a service-role key in a browser.
 
-- `POST /auth/signup`
-- `POST /auth/login`
-- `GET /auth/me`
-- `POST /auth/logout`
+## Endpoints
 
-## User data endpoints
+- `GET /health` and `GET /supabase`: safe configuration checks
+- `POST /auth/signup`, `POST /auth/login`, `GET /auth/me`, `POST /auth/logout`
+- `GET /profiles`, `PUT /profiles`
+- `GET /app-data?entity_type=...`, `POST /app-data`
+- `GET /database`: reports configuration only and never returns the connection string
 
-- `GET /profiles`
-- `POST /profiles`
-- `GET /app-data`
-- `POST /app-data`
+Send protected requests with:
 
-## Notes
+```text
+Authorization: Bearer <access_token>
+```
 
-- Use a Bearer token from `/auth/login` on protected endpoints.
-- The project is still a backend foundation; the full product UI and domain logic remain to be layered on top of this structure.
+The Supabase email-confirmation setting may require the user to confirm their email before login. Migrations `0001_initial.sql` and `0002_operational.sql` configure the schema, RLS, auth trigger, indexes, and update timestamps.
