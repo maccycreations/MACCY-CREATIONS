@@ -1,49 +1,33 @@
 # MACCY-CREATIONS
 
-This repository now includes a working Supabase configuration scaffold and a minimal FastAPI application shell.
+The repository now includes a FastAPI backend with Supabase-ready auth and app-data endpoints. This is the next stage beyond the configuration scaffold.
 
-## Setup
+## Run
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-# Fill in your real local values before runtime.
-```
-
-Edit `.env` with the secure values:
-
-```env
-SUPABASE_URL=https://kyrsdewrgqejoajhpfrn.supabase.co
-SUPABASE_KEY=sb_publishable_cAtn2dFn4QIv7BSCl7Vmmg_hmOz3jVd
-DATABASE_URL=postgresql://postgres:<YOUR-PASSWORD>@db.kyrsdewrgqejoajhpfrn.supabase.co:5432/postgres
-```
-
-The password must not be committed to GitHub. If it contains special characters, URL-encode it.
-
-## Run the app
-
-```bash
+# Set the real local password in DATABASE_URL before direct DB access.
 uvicorn main:app --reload
 ```
 
-## Endpoints
+## Auth endpoints
 
-- `GET /health`
-- `GET /supabase`
+- `POST /auth/signup`
+- `POST /auth/login`
+- `GET /auth/me`
+- `POST /auth/logout`
+
+## User data endpoints
+
 - `GET /profiles`
 - `POST /profiles`
-- `GET /database`
+- `GET /app-data`
+- `POST /app-data`
 
-## Supabase
+## Notes
 
-Run the CLI locally:
-
-```bash
-supabase login
-supabase link --project-ref kyrsdewrgqejoajhpfrn
-supabase db push
-```
-
-The RLS setup lives in `supabase/migrations/0001_initial.sql`.
+- Use a Bearer token from `/auth/login` on protected endpoints.
+- The project is still a backend foundation; the full product UI and domain logic remain to be layered on top of this structure.
