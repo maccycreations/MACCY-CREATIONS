@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlmodel import Field, SQLModel
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 class UserProfile(SQLModel, table=True):
@@ -10,7 +15,7 @@ class UserProfile(SQLModel, table=True):
     full_name: str
     email: str
     target_role: Optional[str] = None
-    created_at: str = "2026-01-01T00:00:00Z"
+    created_at: str = Field(default_factory=now_iso)
 
 
 class Skill(SQLModel, table=True):
@@ -54,6 +59,7 @@ class Resume(SQLModel, table=True):
 
 class JobListing(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    external_id: Optional[str] = Field(default=None, index=True)
     company: str
     title: str
     location: str = "Remote"
@@ -84,3 +90,13 @@ class AIConfig(SQLModel, table=True):
     api_key_hint: Optional[str] = None
     enabled: bool = True
     owner_id: Optional[int] = Field(default=None, foreign_key="userprofile.id")
+
+
+class SyncEvent(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    entity_type: str
+    operation: str
+    payload: str
+    created_at: str = Field(default_factory=now_iso)
+    synced_at: Optional[str] = None
+    attempts: int = 0

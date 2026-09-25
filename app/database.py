@@ -12,7 +12,7 @@ engine = create_engine(f"sqlite:///{DB_PATH}", connect_args={"check_same_thread"
 
 
 def init_db() -> None:
-    from app.models import AIConfig, Application, CareerTrack, JobListing, Resume, Roadmap, Skill, UserProfile
+    from app.models import AIConfig, Application, CareerTrack, JobListing, Resume, Roadmap, Skill, SyncEvent, UserProfile
     SQLModel.metadata.create_all(engine)
 
 

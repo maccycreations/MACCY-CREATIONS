@@ -1,79 +1,21 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Dashboard | MACCY-CREATIONS</title>
-    <link rel="stylesheet" href="/static/styles.css">
-  </head>
-  <body>
-    <header class="topbar">
-      <div class="brand">MACCY-CREATIONS</div>
-      <div class="nav-right">
-        <button id="logout-btn">Logout</button>
-      </div>
-    </header>
-
-    <main class="dashboard-shell">
-      <aside class="sidebar">
-        <h3>Navigation</h3>
-        <ul>
-          <li>Overview</li>
-          <li>Projects</li>
-          <li>Clients</li>
-          <li>Reports</li>
-        </ul>
-      </aside>
-
-      <section class="content">
-        <div class="stats">
-          <article class="stat-box">
-            <span>Projects</span>
-            <strong id="project-count">0</strong>
-          </article>
-          <article class="stat-box">
-            <span>Clients</span>
-            <strong id="client-count">0</strong>
-          </article>
-          <article class="stat-box">
-            <span>Notes</span>
-            <strong id="note-count">0</strong>
-          </article>
-        </div>
-
-        <div class="panel">
-          <h2>Welcome</h2>
-          <p id="welcome-text">Loading dashboard...</p>
-        </div>
-      </section>
-    </main>
-
-    <script>
-      const token = localStorage.getItem('maccy_access_token');
-      if (!token) {
-        window.location.href = '/login';
-      }
-
-      async function loadDashboard() {
-        const response = await fetch('/api/dashboard', { headers: { Authorization: `Bearer ${token}` } });
-        if (!response.ok) {
-          window.location.href = '/login';
-          return;
-        }
-        const data = await response.json();
-        document.getElementById('welcome-text').textContent = `Hello, ${data.user.name || data.user.email}`;
-        document.getElementById('project-count').textContent = data.counts.projects;
-        document.getElementById('client-count').textContent = data.counts.clients;
-        document.getElementById('note-count').textContent = data.counts.notes;
-      }
-
-      document.getElementById('logout-btn').addEventListener('click', async () => {
-        await fetch('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
-        localStorage.removeItem('maccy_access_token');
-        window.location.href = '/login';
-      });
-
-      loadDashboard();
-    </script>
-  </body>
-</html>
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Career Hub | MACCY-CREATIONS</title><link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<header class="topbar"><div class="brand">MACCY-CREATIONS / CAREER HUB</div><a class="button secondary" href="/docs">API docs</a></header>
+<main class="app-shell">
+  <aside class="sidebar"><h2>Workspace</h2><button data-tab="overview">Overview</button><button data-tab="skills">Skills</button><button data-tab="careers">Careers</button><button data-tab="roadmaps">Roadmaps</button><button data-tab="resumes">Resumes & ATS</button><button data-tab="jobs">Live jobs</button><button data-tab="applications">Applications</button><button data-tab="ai">AI hub</button></aside>
+  <section class="content"><div id="status" class="status">Offline-first local mode</div><section id="overview" class="tab active"><h1>Career dashboard</h1><div id="stats" class="stats"></div><div class="panel"><h2>Quick actions</h2><p>Search public jobs, evaluate resume keywords, queue changes locally, and use configured AI providers.</p></div></section>
+  <section id="skills" class="tab"><h1>Skills</h1><div id="skills-list" class="cards"></div></section>
+  <section id="careers" class="tab"><h1>Career paths</h1><div id="careers-list" class="cards"></div></section>
+  <section id="roadmaps" class="tab"><h1>Roadmaps</h1><div id="roadmaps-list" class="cards"></div></section>
+  <section id="resumes" class="tab"><h1>Resume & ATS analysis</h1><textarea id="resume-text" placeholder="Paste resume text"></textarea><textarea id="job-text" placeholder="Paste job description"></textarea><button id="ats-button">Analyze ATS</button><pre id="ats-result"></pre></section>
+  <section id="jobs" class="tab"><h1>Live jobs</h1><input id="job-query" value="python"><button id="job-search">Search public sources</button><div id="jobs-list" class="cards"></div><p class="tiny">Active public connectors: RemoteOK and Arbeitnow. Other boards require approved APIs or user-authorized integrations.</p></section>
+  <section id="applications" class="tab"><h1>Applications</h1><div id="applications-list" class="cards"></div></section>
+  <section id="ai" class="tab"><h1>AI hub</h1><select id="ai-provider"><option value="openai">OpenAI-compatible</option><option value="grok">xAI Grok</option></select><textarea id="ai-prompt" placeholder="Ask for career guidance"></textarea><button id="ai-button">Run assistant</button><pre id="ai-result"></pre></section>
+  </section>
+</main><script src="/static/app.js"></script>
+</body></html>
