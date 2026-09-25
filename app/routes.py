@@ -1,143 +1,73 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Type, TypeVar
+from typing import Any, Dict, List, Type, TypeVar
 
-from fastapi import APIRouter, HTTPException
-from sqlmodel import SQLModel, select
+from fastapi import APIRouter
+from sqlmodel import Session, SQLModel, select
 
 from app.database import engine
 from app.models import AIConfig, Application, CareerTrack, JobListing, Resume, Roadmap, Skill, UserProfile
-from app.schemas import (
-    AIConfigCreate,
-    ApplicationCreate,
-    CareerTrackCreate,
-    JobCreate,
-    ResumeCreate,
-    RoadmapCreate,
-    SkillCreate,
-    UserProfileCreate,
-)
-from sqlmodel import Session
+from app.schemas import AIConfigCreate, ApplicationCreate, CareerTrackCreate, JobCreate, ResumeCreate, RoadmapCreate, SkillCreate, UserProfileCreate
 
 router = APIRouter(prefix="/api/local", tags=["local-career-hub"])
-
 T = TypeVar("T", bound=SQLModel)
 
 
-def serialize(value: SQLModel) -> Dict[str, Any]:
+def dump(value: Any) -> Dict[str, Any]:
     return value.model_dump() if hasattr(value, "model_dump") else value.dict()
 
 
-def collection(model: Type[T]) -> List[Dict[str, Any]]:
+def records(model: Type[T]) -> List[Dict[str, Any]]:
     with Session(engine) as session:
-        return [serialize(item) for item in session.exec(select(model)).all()]
+        return [dump(row) for row in session.exec(select(model)).all()]
 
 
-def create_record(model: Type[T], payload: SQLModel) -> Dict[str, Any]:
+def create(model: Type[T], payload: Any) -> Dict[str, Any]:
     with Session(engine) as session:
-        record = model(**serialize(payload))
-        session.add(record)
+        row = model(**dump(payload))
+        session.add(row)
         session.commit()
-        session.refresh(record)
-        return serialize(record)
+        session.refresh(row)
+        return dump(row)
 
 
 @router.get("/dashboard")
-def dashboard() -> Dict[str, Any]:
-    with Session(engine) as session:
-        skills = session.exec(select(Skill)).all()
-        jobs = session.exec(select(JobListing)).all()
-        applications = session.exec(select(Application)).all()
-        roadmaps = session.exec(select(Roadmap)).all()
-        resumes = session.exec(select(Resume)).all()
-    return {
-        "skills": len(skills),
-        "jobs": len(jobs),
-        "applications": len(applications),
-        "roadmaps": len(roadmaps),
-        "resumes": len(resumes),
-        "top_skills": [item.name for item in skills[:8]],
-    }
+def dashboard():
+    return {"skills": len(records(Skill)), "jobs": len(records(JobListing)), "applications": len(records(Application)), "roadmaps": len(records(Roadmap)), "resumes": len(records(Resume))}
 
 
 @router.post("/profiles")
-def create_profile(payload: UserProfileCreate):
-    return create_record(UserProfile, payload)
-
-
+def create_profile(payload: UserProfileCreate): return create(UserProfile, payload)
 @router.get("/profiles")
-def profiles():
-    return collection(UserProfile)
-
-
+def list_profiles(): return records(UserProfile)
 @router.post("/skills")
-def create_skill(payload: SkillCreate):
-    return create_record(Skill, payload)
-
-
+def create_skill(payload: SkillCreate): return create(Skill, payload)
 @router.get("/skills")
-def skills():
-    return collection(Skill)
-
-
+def list_skills(): return records(Skill)
 @router.post("/careers")
-def create_career(payload: CareerTrackCreate):
-    return create_record(CareerTrack, payload)
-
-
+def create_career(payload: CareerTrackCreate): return create(CareerTrack, payload)
 @router.get("/careers")
-def careers():
-    return collection(CareerTrack)
-
-
+def list_careers(): return records(CareerTrack)
 @router.post("/roadmaps")
 def create_roadmap(payload: RoadmapCreate):
-    data = serialize(payload)
+    data = dump(payload)
     data["steps"] = data["steps"] if isinstance(data["steps"], str) else "\n".join(data["steps"])
-    return create_record(Roadmap, type("RoadmapPayload", (), {"model_dump": lambda self: data})())
-
-
+    return create(Roadmap, type("Payload", (), {"dict": lambda self: data})())
 @router.get("/roadmaps")
-def roadmaps():
-    return collection(Roadmap)
-
-
+def list_roadmaps(): return records(Roadmap)
 @router.post("/resumes")
-def create_resume(payload: ResumeCreate):
-    return create_record(Resume, payload)
-
-
+def create_resume(payload: ResumeCreate): return create(Resume, payload)
 @router.get("/resumes")
-def resumes():
-    return collection(Resume)
-
-
+def list_resumes(): return records(Resume)
 @router.post("/jobs")
-def create_job(payload: JobCreate):
-    return create_record(JobListing, payload)
-
-
+def create_job(payload: JobCreate): return create(JobListing, payload)
 @router.get("/jobs")
-def jobs():
-    return collection(JobListing)
-
-
+def list_jobs(): return records(JobListing)
 @router.post("/applications")
-def create_application(payload: ApplicationCreate):
-    return create_record(Application, payload)
-
-
+def create_application(payload: ApplicationCreate): return create(Application, payload)
 @router.get("/applications")
-def applications():
-    return collection(Application)
-
-
+def list_applications(): return records(Application)
 @router.post("/ai-config")
-def create_ai_config(payload: AIConfigCreate):
-    # Store only a hint, never a raw provider secret.
-    return create_record(AIConfig, payload)
-
-
+def create_ai_config(payload: AIConfigCreate): return create(AIConfig, payload)
 @router.get("/ai-config")
-def ai_configs():
-    return collection(AIConfig)
+def list_ai_configs(): return records(AIConfig)
