@@ -2,25 +2,31 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, Header, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
+from app.database import init_db
+from app.routes import router as local_router
+from app.seed import seed_database
 from auth import bearer_token, get_current_user
 from supabase_client import database_url, get_supabase, get_user_supabase
 
 BASE_DIR = Path(__file__).resolve().parent
+app = FastAPI(title="MACCY-CREATIONS Career Hub", version="1.1.0")
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-app = FastAPI(title="MACCY-CREATIONS", version="1.0.0")
+app.include_router(local_router)
 
 
 class SignUpPayload(BaseModel):
     email: str = Field(..., min_length=3)
     password: str = Field(..., min_length=8)
-    display_name: str | None = None
+    display_name: Optional[str] = None
 
 
 class LoginPayload(BaseModel):
@@ -30,12 +36,18 @@ class LoginPayload(BaseModel):
 
 class ProfilePayload(BaseModel):
     display_name: str = Field(..., min_length=1, max_length=120)
-    bio: str | None = None
+    bio: Optional[str] = None
 
 
 class AppDataPayload(BaseModel):
     entity_type: str = Field(..., min_length=1, max_length=80)
     payload: Dict[str, Any]
+
+
+@app.on_event("startup")
+def startup() -> None:
+    init_db()
+    seed_database()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -49,34 +61,18 @@ def login_page(request: Request):
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
-def dashboard_page(request: Request, authorization: str | None = Header(default=None)):
-    try:
-        token = bearer_token(authorization)
-    except ValueError:
-        return RedirectResponse(url="/login", status_code=307)
-
-    user = get_current_user(token)
-    if user is None:
-        return RedirectResponse(url="/login", status_code=307)
-
-    return templates.TemplateResponse(
-        "dashboard.html",
-        {
-            "request": request,
-            "user": {"id": user.id, "email": user.email, "name": (getattr(user, "user_metadata", {}) or {}).get("full_name")},
-            "project": "MACCY-CREATIONS",
-        },
-    )
+def dashboard_page(request: Request):
+    return templates.TemplateResponse("dashboard.html", {"request": request, "project": "MACCY-CREATIONS"})
 
 
 @app.get("/health")
 def health() -> Dict[str, Any]:
-    db_value = os.getenv("DATABASE_URL", "")
+    value = os.getenv("DATABASE_URL", "")
     return {
         "status": "ok",
         "project": "MACCY-CREATIONS",
         "supabase_url": os.getenv("SUPABASE_URL", ""),
-        "database_configured": bool(db_value and "<YOUR-PASSWORD>" not in db_value and "[YOUR-PASSWORD>" not in db_value),
+        "database_configured": bool(value and "<YOUR-PASSWORD>" not in value and "[YOUR-PASSWORD]" not in value),
     }
 
 
@@ -92,20 +88,12 @@ def supabase_status() -> Dict[str, Any]:
 @app.post("/api/auth/signup")
 def sign_up(payload: SignUpPayload) -> Dict[str, Any]:
     try:
-        response = get_supabase().auth.sign_up({
-            "email": payload.email,
-            "password": payload.password,
-            "options": {"data": {"full_name": payload.display_name or payload.email.split("@")[0]}},
-        })
+        response = get_supabase().auth.sign_up({"email": payload.email, "password": payload.password, "options": {"data": {"full_name": payload.display_name or payload.email.split("@")[0]}}})
         user = getattr(response, "user", None)
         if not user:
             raise HTTPException(status_code=400, detail="Signup failed")
-        return {
-            "status": "ok",
-            "confirmation_required": getattr(response, "session", None) is None,
-            "user": {"id": user.id, "email": user.email},
-            "access_token": getattr(getattr(response, "session", None), "access_token", None),
-        }
+        session = getattr(response, "session", None)
+        return {"status": "ok", "confirmation_required": session is None, "user": {"id": user.id, "email": user.email}, "access_token": getattr(session, "access_token", None) if session else None, "refresh_token": getattr(session, "refresh_token", None) if session else None}
     except HTTPException:
         raise
     except Exception as exc:
@@ -116,28 +104,22 @@ def sign_up(payload: SignUpPayload) -> Dict[str, Any]:
 def login(payload: LoginPayload) -> Dict[str, Any]:
     try:
         response = get_supabase().auth.sign_in_with_password({"email": payload.email, "password": payload.password})
-        session = getattr(response, "session", None)
-        user = getattr(response, "user", None)
+        session, user = getattr(response, "session", None), getattr(response, "user", None)
         if session is None or user is None:
             raise HTTPException(status_code=401, detail="Login failed")
-        return {
-            "status": "ok",
-            "access_token": session.access_token,
-            "refresh_token": session.refresh_token,
-            "user": {"id": user.id, "email": user.email},
-        }
+        return {"status": "ok", "access_token": session.access_token, "refresh_token": session.refresh_token, "user": {"id": user.id, "email": user.email}}
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=401, detail=f"Invalid credentials: {exc}") from exc
+        raise HTTPException(status_code=401, detail="Invalid credentials") from exc
 
 
 @app.get("/api/auth/me")
-def auth_me(authorization: str | None = Header(default=None)) -> Dict[str, Any]:
+def auth_me(authorization: Optional[str] = Header(default=None)) -> Dict[str, Any]:
     try:
         token = bearer_token(authorization)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
     user = get_current_user(token)
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
@@ -146,7 +128,7 @@ def auth_me(authorization: str | None = Header(default=None)) -> Dict[str, Any]:
 
 
 @app.post("/api/auth/logout")
-def logout(authorization: str | None = Header(default=None)) -> Dict[str, str]:
+def logout(authorization: Optional[str] = Header(default=None)) -> Dict[str, str]:
     try:
         token = bearer_token(authorization)
     except ValueError as exc:
@@ -158,8 +140,7 @@ def logout(authorization: str | None = Header(default=None)) -> Dict[str, str]:
     return {"status": "ok", "message": "Signed out"}
 
 
-@app.get("/api/profiles")
-def list_profiles(authorization: str | None = Header(default=None)) -> List[Dict[str, Any]]:
+def authenticated_user(authorization: Optional[str]):
     try:
         token = bearer_token(authorization)
     except ValueError as exc:
@@ -167,79 +148,37 @@ def list_profiles(authorization: str | None = Header(default=None)) -> List[Dict
     user = get_current_user(token)
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication required")
+    return token, user
+
+
+@app.get("/api/profiles")
+def list_profiles(authorization: Optional[str] = Header(default=None)) -> List[Dict[str, Any]]:
+    token, user = authenticated_user(authorization)
     response = get_user_supabase(token).table("profiles").select("*").eq("id", user.id).execute()
     return response.data or []
 
 
 @app.put("/api/profiles")
-def update_profile(payload: ProfilePayload, authorization: str | None = Header(default=None)) -> Dict[str, Any]:
-    try:
-        token = bearer_token(authorization)
-    except ValueError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    user = get_current_user(token)
-    if user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
+def update_profile(payload: ProfilePayload, authorization: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+    token, user = authenticated_user(authorization)
     response = get_user_supabase(token).table("profiles").upsert({"id": user.id, "display_name": payload.display_name}).execute()
     return (response.data or [{"id": user.id, "display_name": payload.display_name}])[0]
 
 
 @app.get("/api/app-data")
-def list_app_data(entity_type: str | None = None, authorization: str | None = Header(default=None)) -> List[Dict[str, Any]]:
-    try:
-        token = bearer_token(authorization)
-    except ValueError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    user = get_current_user(token)
-    if user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
+def list_app_data(entity_type: Optional[str] = None, authorization: Optional[str] = Header(default=None)) -> List[Dict[str, Any]]:
+    token, user = authenticated_user(authorization)
     query = get_user_supabase(token).table("app_data").select("*").eq("user_id", user.id)
     if entity_type:
         query = query.eq("entity_type", entity_type)
-    response = query.order("updated_at", desc=True).execute()
-    return response.data or []
+    return query.order("updated_at", desc=True).execute().data or []
 
 
 @app.post("/api/app-data")
-def create_app_data(payload: AppDataPayload, authorization: str | None = Header(default=None)) -> Dict[str, Any]:
-    try:
-        token = bearer_token(authorization)
-    except ValueError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    user = get_current_user(token)
-    if user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
-    response = get_user_supabase(token).table("app_data").insert({
-        "user_id": user.id,
-        "entity_type": payload.entity_type,
-        "payload": payload.payload,
-    }).execute()
+def create_app_data(payload: AppDataPayload, authorization: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+    token, user = authenticated_user(authorization)
+    response = get_user_supabase(token).table("app_data").insert({"user_id": user.id, "entity_type": payload.entity_type, "payload": payload.payload}).execute()
     return (response.data or [{"status": "ok"}])[0]
-
-
-@app.get("/api/dashboard")
-def dashboard_summary(authorization: str | None = Header(default=None)) -> Dict[str, Any]:
-    try:
-        token = bearer_token(authorization)
-    except ValueError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    user = get_current_user(token)
-    if user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
-    app_data = list_app_data(authorization=authorization)
-    return {
-        "status": "ok",
-        "user": {"id": user.id, "email": user.email, "name": (getattr(user, "user_metadata", {}) or {}).get("full_name")},
-        "counts": {
-            "records": len(app_data),
-            "projects": len([item for item in app_data if item.get("entity_type") == "project"]),
-            "clients": len([item for item in app_data if item.get("entity_type") == "client"]),
-            "notes": len([item for item in app_data if item.get("entity_type") == "note"]),
-        },
-    }
 
 
 @app.get("/database")

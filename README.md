@@ -1,45 +1,30 @@
 # MACCY-CREATIONS
 
-A complete, deployable FastAPI starter for the MACCY-CREATIONS brand, backed by Supabase auth and data storage and designed to run locally with a secure environment file.
+## Current product build
 
-## Features
+The repository now contains a usable local career-platform MVP plus Supabase authentication/data routes:
 
-- Landing page and login page
-- Supabase-based auth (signup, login, logout, current user)
-- Protected profile API and app-data API
-- Dashboard summary endpoint
-- Local health and configuration checks
-- Database and RLS-ready schema scripts
-- Demo-friendly local startup without a live Supabase connection
+- SQLite + SQLModel local database
+- Seeded skills, careers, roadmap, resume, jobs, applications, and AI configuration
+- Local CRUD API under `/api/local/*`
+- Supabase auth/profile/app-data API under `/api/*`
+- Landing, login, and dashboard pages
+- Static CSS mounted at `/static`
+- Automated smoke tests
 
-## Run locally
+## Run
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-# Add the real DATABASE_URL password locally before direct Postgres access.
 uvicorn main:app --reload
 ```
 
-Then open:
+Open `http://localhost:8000/`. API documentation is available at `http://localhost:8000/docs`.
 
-- http://localhost:8000/
-- http://localhost:8000/login
-- http://localhost:8000/dashboard
-
-## Environment file
-
-```env
-SUPABASE_URL=https://kyrsdewrgqejoajhpfrn.supabase.co
-SUPABASE_KEY=sb_publishable_cAtn2dFn4QIv7BSCl7Vmmg_hmOz3jVd
-DATABASE_URL=postgresql://postgres:<YOUR-PASSWORD>@db.kyrsdewrgqejoajhpfrn.supabase.co:5432/postgres
-```
-
-Do not commit `.env` or service-role keys. Use the publishable key for RLS-backed client access.
-
-## Supabase setup
+## Supabase
 
 ```bash
 supabase login
@@ -47,24 +32,18 @@ supabase link --project-ref kyrsdewrgqejoajhpfrn
 supabase db push
 ```
 
-The migration files live in `supabase/migrations/`.
+The publishable key belongs in `.env`; never commit the database password or service-role key. Supabase auth routes require a valid bearer access token. Local MVP routes are intentionally separate from remote Supabase routes so offline data remains available when the network is unavailable.
 
-## API examples
+## Local product APIs
 
-```bash
-curl -X POST http://localhost:8000/api/auth/signup \
-  -H "Content-Type: application/json" \
-  -d '{"email":"user@example.com","password":"Pass12345","display_name":"User"}'
-```
+- `GET /api/local/dashboard`
+- `GET/POST /api/local/profiles`
+- `GET/POST /api/local/skills`
+- `GET/POST /api/local/careers`
+- `GET/POST /api/local/roadmaps`
+- `GET/POST /api/local/resumes`
+- `GET/POST /api/local/jobs`
+- `GET/POST /api/local/applications`
+- `GET/POST /api/local/ai-config`
 
-```bash
-curl -X POST http://localhost:8000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"user@example.com","password":"Pass12345"}'
-```
-
-Send the access token as:
-
-```text
-Authorization: Bearer <access_token>
-```
+Provider keys are never accepted by the local AI config API; store only a non-secret hint and configure actual secrets in the server environment.
